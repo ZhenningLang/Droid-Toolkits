@@ -4,6 +4,8 @@ Interactive TUI for browsing, searching, and managing [Droid](https://docs.facto
 
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) + [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
+![screenshot](screenshot.png)
+
 ## Install
 
 ```bash
