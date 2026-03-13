@@ -31,7 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	model := result.(tui.Model)
+	model := result.(*tui.Model)
 	if id := model.ResumeID(); id != "" {
 		// exec droid -r to replace this process
 		droid, err := exec.LookPath("droid")

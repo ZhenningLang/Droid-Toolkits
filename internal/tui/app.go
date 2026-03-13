@@ -36,7 +36,7 @@ type Model struct {
 	errMsg      string
 }
 
-func New(sessions []session.Session) Model {
+func New(sessions []session.Session) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "Search sessions..."
 	ti.Focus()
@@ -51,7 +51,7 @@ func New(sessions []session.Session) Model {
 		indices[i] = i
 	}
 
-	return Model{
+	return &Model{
 		sessions: sessions,
 		filtered: indices,
 		search:   ti,
@@ -59,11 +59,11 @@ func New(sessions []session.Session) Model {
 	}
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -286,7 +286,7 @@ func (m *Model) selectedSession() *session.Session {
 	return &m.sessions[m.filtered[m.cursor]]
 }
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	if m.width == 0 {
 		return "Loading..."
 	}
@@ -380,10 +380,10 @@ func (m Model) View() string {
 }
 
 // ResumeID returns the session ID to resume after quitting, or empty string.
-func (m Model) ResumeID() string {
+func (m *Model) ResumeID() string {
 	return m.resumeID
 }
 
-func (m Model) Quit() bool {
+func (m *Model) Quit() bool {
 	return m.quit
 }
