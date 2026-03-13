@@ -3,31 +3,43 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
 	"github.com/zhenninglang/mantis/internal/session"
 )
 
-func filterSessions(sessions []session.Session, query string) []int {
-	if query == "" {
-		indices := make([]int, len(sessions))
-		for i := range indices {
-			indices[i] = i
+func filterSessions(sessions []session.Session, query, projectFilter string) []int {
+	// step 1: project filter
+	var candidates []int
+	if projectFilter == "" {
+		candidates = make([]int, len(sessions))
+		for i := range candidates {
+			candidates[i] = i
 		}
-		return indices
+	} else {
+		for i, s := range sessions {
+			if s.ProjectShort() == projectFilter {
+				candidates = append(candidates, i)
+			}
+		}
 	}
 
-	source := make(sessionSource, len(sessions))
-	for i, s := range sessions {
+	if query == "" {
+		return candidates
+	}
+
+	// step 2: fuzzy search within candidates
+	source := make(sessionSource, len(candidates))
+	for i, idx := range candidates {
+		s := sessions[idx]
 		source[i] = fmt.Sprintf("%s %s %s", s.Meta.Title, s.ProjectShort(), extractFirstUserMsg(s))
 	}
 
 	matches := fuzzy.FindFrom(query, source)
 	indices := make([]int, len(matches))
 	for i, m := range matches {
-		indices[i] = m.Index
+		indices[i] = candidates[m.Index]
 	}
 	return indices
 }
@@ -105,43 +117,4 @@ func modelShort(model string) string {
 		return m[:12]
 	}
 	return m
-}
-
-func timeAgo(t time.Time) string {
-	d := time.Since(t)
-	switch {
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
-	case d < 30*24*time.Hour:
-		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
-	default:
-		return t.Format("Jan 02")
-	}
-}
-
-func formatTokens(n int) string {
-	if n < 1000 {
-		return fmt.Sprintf("%d", n)
-	}
-	if n < 1_000_000 {
-		return fmt.Sprintf("%.1fK", float64(n)/1000)
-	}
-	return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
-}
-
-func formatDuration(d time.Duration) string {
-	secs := int(d.Seconds())
-	if secs < 60 {
-		return fmt.Sprintf("%ds", secs)
-	}
-	mins := secs / 60
-	if mins < 60 {
-		return fmt.Sprintf("%dm %ds", mins, secs%60)
-	}
-	hours := mins / 60
-	return fmt.Sprintf("%dh %dm", hours, mins%60)
 }

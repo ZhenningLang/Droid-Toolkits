@@ -76,26 +76,3 @@ func renderPreview(s *session.Session, width int) string {
 	return b.String()
 }
 
-func extractText(content any) string {
-	switch v := content.(type) {
-	case string:
-		return singleLine(v)
-	case []any:
-		for _, item := range v {
-			if m, ok := item.(map[string]any); ok {
-				if m["type"] == "text" {
-					if t, ok := m["text"].(string); ok {
-						return singleLine(t)
-					}
-				}
-			}
-		}
-	}
-	return ""
-}
-
-func singleLine(s string) string {
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.TrimSpace(s)
-	return s
-}

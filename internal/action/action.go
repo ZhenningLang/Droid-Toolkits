@@ -3,23 +3,10 @@ package action
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/zhenninglang/mantis/internal/session"
 )
-
-func Resume(s *session.Session) error {
-	cmd := exec.Command("droid", "-r", s.Meta.ID)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	// change to the session's working directory if available
-	if s.Meta.WorkingDirectory != "" {
-		cmd.Dir = s.Meta.WorkingDirectory
-	}
-	return cmd.Run()
-}
 
 func Delete(s *session.Session) error {
 	jsonl := s.FilePath

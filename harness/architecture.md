@@ -9,11 +9,12 @@ internal/
     types.go                  — 数据模型（Session, SessionMeta, Settings, TokenUsage, Message）
     loader.go                 — 从 ~/.factory/sessions/ 加载所有 session
   action/
-    action.go                 — 操作逻辑（Resume, Delete, Rename）
+    action.go                 — 操作逻辑（Delete, Rename）
   tui/
     app.go                    — 主 Model + Init/Update/View（Bubble Tea 框架）
-    list.go                   — 列表渲染 + 模糊搜索 + 工具函数
+    list.go                   — 列表渲染 + 模糊搜索
     preview.go                — 预览面板渲染
+    helpers.go                — 通用工具函数（格式化、文本提取）
     styles.go                 — 所有 lipgloss 样式定义
     stats.go                  — 统计面板（按项目分组）
 harness/                      — AI agent 参考文档（本目录）
@@ -118,10 +119,12 @@ type Session struct {
 
 ### 项目名解析
 
-目录名 `-Users-jane-Projects-myapp` 的解析：
-- `dirToProject()` → `"myapp"`（取最后一段）
-- `dirToPath()` → `"/Users/jane/Projects/myapp"`（`-` 替换为 `/`）
-- 根目录直接存放的 .jsonl → Project 为空，显示为 `"global"`
+优先级：session 元数据 cwd > 文件系统探测 > naive 替换
+
+1. **cwd 元数据**（首选）：`.jsonl` 首行的 `cwd` 字段即为真实工作目录，直接用作 `ProjectFull`，`filepath.Base` 取短名
+2. **文件系统探测**（兜底）：目录名如 `-Users-jane-Projects-my-app`，`-` 既是路径分隔符也可能是目录名的一部分。`probePath` 从左到右逐段尝试拼接，通过 `os.Stat` 验证路径是否存在
+3. **naive 替换**（最终兜底）：目录在本机不存在时，所有 `-` 替换为 `/`
+4. 根目录直接存放的 .jsonl → Project 为空，显示为 `"global"`
 
 ## 依赖关系
 

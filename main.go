@@ -10,6 +10,8 @@ import (
 	"github.com/zhenninglang/mantis/internal/tui"
 )
 
+var version = "dev"
+
 func main() {
 	sessions, err := session.LoadAll()
 	if err != nil {
@@ -22,7 +24,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	m := tui.New(sessions)
+	m := tui.New(sessions, version)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	result, err := p.Run()

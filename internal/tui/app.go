@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -19,6 +20,7 @@ const (
 	viewConfirmDelete
 	viewRename
 	viewBatchSelect
+	viewProjectSelect
 )
 
 type Model struct {
@@ -34,10 +36,15 @@ type Model struct {
 	resumeID    string
 	quit        bool
 	errMsg      string
-	fullPath    bool // toggle project name display
+	fullPath      bool
+	version       string
+	projectFilter string
+	projects      []string
+	projectCursor int
+	projectQuery  string
 }
 
-func New(sessions []session.Session) *Model {
+func New(sessions []session.Session, version string) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "Search sessions..."
 	ti.Focus()
@@ -57,7 +64,24 @@ func New(sessions []session.Session) *Model {
 		filtered: indices,
 		search:   ti,
 		rename:   ri,
+		version:  version,
+		projects: collectProjects(sessions),
 	}
+}
+
+func collectProjects(sessions []session.Session) []string {
+	seen := map[string]bool{}
+	for i := range sessions {
+		seen[sessions[i].ProjectShort()] = true
+	}
+	projects := make([]string, 0, len(seen))
+	for p := range seen {
+		projects = append(projects, p)
+	}
+	sort.Slice(projects, func(i, j int) bool {
+		return strings.ToLower(projects[i]) < strings.ToLower(projects[j])
+	})
+	return projects
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -105,13 +129,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case viewRename:
 		return m.handleRename(msg)
 	case viewStats:
-		if key == "ctrl+s" || key == "esc" {
-			m.mode = viewList
-			m.search.Focus()
-		}
-		return m, nil
+		return m.handleStats(key)
 	case viewBatchSelect:
 		return m.handleBatchSelect(key)
+	case viewProjectSelect:
+		return m.handleProjectSelect(msg)
 	}
 
 	// list mode: search box is focused, so only intercept navigation/action keys
@@ -136,6 +158,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if searching {
 			m.search.SetValue("")
 			m.refilter()
+		} else if m.projectFilter != "" {
+			m.projectFilter = ""
+			m.refilter()
 		} else {
 			m.quit = true
 			return m, tea.Quit
@@ -159,6 +184,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+s":
 		m.mode = viewStats
 		m.search.Blur()
+	case "ctrl+p":
+		m.mode = viewProjectSelect
+		m.projectCursor = 0
+		m.projectQuery = ""
+		m.search.Blur()
 	case "ctrl+q":
 		m.quit = true
 		return m, tea.Quit
@@ -174,6 +204,68 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	return m, nil
+}
+
+func (m *Model) filteredProjects() []string {
+	if m.projectQuery == "" {
+		return m.projects
+	}
+	q := strings.ToLower(m.projectQuery)
+	var result []string
+	for _, p := range m.projects {
+		if strings.Contains(strings.ToLower(p), q) {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+func (m *Model) handleProjectSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	filtered := m.filteredProjects()
+	total := len(filtered) + 1 // +1 for "All"
+
+	switch key {
+	case "up", "k":
+		if m.projectCursor > 0 {
+			m.projectCursor--
+		}
+	case "down", "j":
+		if m.projectCursor < total-1 {
+			m.projectCursor++
+		}
+	case "enter":
+		if m.projectCursor == 0 {
+			m.projectFilter = ""
+		} else if m.projectCursor-1 < len(filtered) {
+			m.projectFilter = filtered[m.projectCursor-1]
+		}
+		m.refilter()
+		m.mode = viewList
+		m.search.Focus()
+	case "esc":
+		m.mode = viewList
+		m.search.Focus()
+	case "backspace":
+		if len(m.projectQuery) > 0 {
+			m.projectQuery = m.projectQuery[:len(m.projectQuery)-1]
+			m.projectCursor = 0
+		}
+	default:
+		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
+			m.projectQuery += key
+			m.projectCursor = 0
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) handleStats(key string) (tea.Model, tea.Cmd) {
+	if key == "ctrl+s" || key == "esc" {
+		m.mode = viewList
+		m.search.Focus()
+	}
 	return m, nil
 }
 
@@ -276,7 +368,7 @@ func (m *Model) handleBatchSelect(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) refilter() {
-	m.filtered = filterSessions(m.sessions, m.search.Value())
+	m.filtered = filterSessions(m.sessions, m.search.Value(), m.projectFilter)
 	if m.cursor >= len(m.filtered) {
 		m.cursor = max(0, len(m.filtered)-1)
 	}
@@ -298,13 +390,19 @@ func (m *Model) View() string {
 	case viewStats:
 		return borderStyle.Width(m.width - 2).Height(m.height - 2).Render(
 			renderStats(m.sessions, m.width-4, m.height-4))
+	case viewProjectSelect:
+		return borderStyle.Width(m.width - 2).Height(m.height - 2).Render(
+			m.renderProjectSelect(m.width-4, m.height-4))
 	}
 
 	var b strings.Builder
 
 	// header
-	header := titleStyle.Render("mantis") + " " + m.search.View() +
+	header := titleStyle.Render("mantis") + dimStyle.Render(" v"+m.version) + " " + m.search.View() +
 		dimStyle.Render(fmt.Sprintf("  [%d/%d]", len(m.filtered), len(m.sessions)))
+	if m.projectFilter != "" {
+		header += " " + projectStyle.Render("["+m.projectFilter+"]")
+	}
 	b.WriteString(header)
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render(strings.Repeat("─", m.width)))
@@ -375,7 +473,7 @@ func (m *Model) View() string {
 		if m.errMsg != "" {
 			b.WriteString(dimStyle.Render(m.errMsg) + "  ")
 		}
-		help := helpStyle.Render("↑↓:nav  Enter:resume  Tab:path  ^D:del  ^X:batch  ^R:rename  ^S:stats  Esc:quit")
+		help := helpStyle.Render("↑↓:nav  Enter:resume  Tab:path  ^P:project  ^D:del  ^X:batch  ^R:rename  ^S:stats  Esc:quit")
 		b.WriteString(help)
 	}
 
@@ -389,4 +487,53 @@ func (m *Model) ResumeID() string {
 
 func (m *Model) Quit() bool {
 	return m.quit
+}
+
+func (m *Model) renderProjectSelect(width, height int) string {
+	var b strings.Builder
+	b.WriteString(previewTitleStyle.Render("Filter by Project"))
+
+	if m.projectQuery != "" {
+		b.WriteString("  " + dimStyle.Render("> "+m.projectQuery+"_"))
+	} else {
+		b.WriteString("  " + dimStyle.Render("type to search..."))
+	}
+	b.WriteString("\n\n")
+
+	filtered := m.filteredProjects()
+	items := make([]string, 0, len(filtered)+1)
+	items = append(items, "All")
+	items = append(items, filtered...)
+
+	start := 0
+	visible := height - 5
+	if visible < 3 {
+		visible = 3
+	}
+	if m.projectCursor >= start+visible {
+		start = m.projectCursor - visible + 1
+	}
+
+	for i := start; i < len(items) && i < start+visible; i++ {
+		label := items[i]
+		prefix := "  "
+		if m.projectFilter != "" && label == m.projectFilter {
+			prefix = "● "
+		}
+		if m.projectFilter == "" && i == 0 {
+			prefix = "● "
+		}
+
+		line := fmt.Sprintf("%s%s", prefix, label)
+		if i == m.projectCursor {
+			b.WriteString(selectedStyle.Width(width).Render(line))
+		} else {
+			b.WriteString(normalStyle.Render(line))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("↑↓:nav  Enter:select  Esc:cancel"))
+	return b.String()
 }

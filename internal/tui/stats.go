@@ -2,7 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/zhenninglang/mantis/internal/session"
 )
@@ -41,14 +43,7 @@ func renderStats(sessions []session.Session, width, height int) string {
 	for k, v := range projects {
 		sorted = append(sorted, kv{k, v})
 	}
-	// sort by count desc
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[j].v > sorted[i].v {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].v > sorted[j].v })
 
 	maxShow := min(height-10, len(sorted))
 	if maxShow < 1 {
@@ -73,23 +68,10 @@ func renderStats(sessions []session.Session, width, height int) string {
 	b.WriteString("\n")
 
 	b.WriteString(statLabelStyle.Render("Total Active Time: "))
-	b.WriteString(statValueStyle.Render(formatDurationMs(totalActiveMs)))
+	b.WriteString(statValueStyle.Render(formatDuration(time.Duration(totalActiveMs) * time.Millisecond)))
 	b.WriteString("\n\n")
 
 	b.WriteString(helpStyle.Render("Press Ctrl+S or Esc to return"))
 
 	return b.String()
-}
-
-func formatDurationMs(ms int) string {
-	secs := ms / 1000
-	if secs < 60 {
-		return fmt.Sprintf("%ds", secs)
-	}
-	mins := secs / 60
-	if mins < 60 {
-		return fmt.Sprintf("%dm %ds", mins, secs%60)
-	}
-	hours := mins / 60
-	return fmt.Sprintf("%dh %dm", hours, mins%60)
 }
