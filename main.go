@@ -104,7 +104,7 @@ Usage: mantis [command]
 Commands:
   (none)     Launch interactive TUI
   config     Configure LLM for smart search
-  index      Generate AI summaries for all sessions (--force to regenerate all)
+  index      Generate AI summaries for all sessions (--force to regenerate all, --retry to redo empty ones)
   status     Show indexing status and statistics
   clean      Remove all empty sessions (no user messages)
   version    Print version
@@ -130,17 +130,23 @@ func runIndex() error {
 		return fmt.Errorf("LLM not configured. Run `mantis config` first")
 	}
 
-	force := len(os.Args) > 2 && (os.Args[2] == "--force" || os.Args[2] == "-f")
+	flag := ""
+	if len(os.Args) > 2 {
+		flag = os.Args[2]
+	}
 
 	sessions, err := session.LoadAll()
 	if err != nil {
 		return err
 	}
 
-	if force {
-		// clear all existing summaries
+	switch flag {
+	case "--force", "-f":
 		os.RemoveAll(summary.Dir())
 		fmt.Println("Cleared all existing summaries.")
+	case "--retry", "-r":
+		removed := summary.RemoveEmpty(sessions)
+		fmt.Printf("Removed %d empty summaries for retry.\n", removed)
 	}
 
 	ch, total := summary.GenerateMissing(context.Background(), cfg.LLM, sessions)

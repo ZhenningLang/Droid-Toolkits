@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/zhenninglang/mantis/internal/config"
+	"github.com/zhenninglang/mantis/internal/session"
 )
 
 type Topic struct {
@@ -63,6 +64,19 @@ func SaveSummary(sessionFilePath string, s *Summary) error {
 func HasSummary(sessionFilePath string) bool {
 	_, err := os.Stat(SummaryPath(sessionFilePath))
 	return err == nil
+}
+
+// RemoveEmpty deletes summary files that have an empty title, so they can be re-indexed.
+func RemoveEmpty(sessions []session.Session) int {
+	removed := 0
+	for i := range sessions {
+		s := LoadSummary(sessions[i].FilePath)
+		if s != nil && s.Title == "" {
+			os.Remove(SummaryPath(sessions[i].FilePath))
+			removed++
+		}
+	}
+	return removed
 }
 
 // SearchText returns a concatenated string of all summary fields for fuzzy search.
