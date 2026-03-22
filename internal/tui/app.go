@@ -565,7 +565,7 @@ func (m *Model) View() string {
 		if sel := m.selectedSession(); sel != nil {
 			selSum = m.summaries[m.filtered[m.cursor]]
 		}
-		preview := renderPreview(m.selectedSession(), selSum, m.width)
+		preview := renderPreview(m.selectedSession(), selSum, m.width, previewHeight)
 		lines := strings.Split(preview, "\n")
 		for i := 0; i < previewHeight && i < len(lines); i++ {
 			b.WriteString(lines[i])

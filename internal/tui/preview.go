@@ -8,22 +8,22 @@ import (
 	"github.com/zhenninglang/mantis/internal/summary"
 )
 
-func renderPreview(s *session.Session, sum *summary.Summary, width int) string {
+func renderPreview(s *session.Session, sum *summary.Summary, width, height int) string {
 	if s == nil {
 		return dimStyle.Render("No session selected")
 	}
 
 	var b strings.Builder
 
-	b.WriteString(previewTitleStyle.Render(s.Meta.Title))
+	// line 1: title (prefer AI title)
+	title := s.Meta.Title
+	if sum != nil && sum.Title != "" {
+		title = "[AI] " + sum.Title
+	}
+	b.WriteString(previewTitleStyle.Render(truncateDisplay(title, width-2)))
 	b.WriteString("\n")
 
-	// show AI title if available
-	if sum != nil && sum.Title != "" {
-		b.WriteString(dimStyle.Render("[AI] ") + previewValueStyle.Render(sum.Title))
-		b.WriteString("\n")
-	}
-
+	// line 2-3: metadata
 	info := fmt.Sprintf("%s  |  %s  |  %s",
 		previewLabelStyle.Render("Project: ")+previewValueStyle.Render(s.ProjectShort()),
 		previewLabelStyle.Render("Model: ")+previewValueStyle.Render(modelShort(s.Settings.Model)),
@@ -42,7 +42,7 @@ func renderPreview(s *session.Session, sum *summary.Summary, width int) string {
 	b.WriteString(tokens)
 	b.WriteString("\n")
 
-	// extra token details + mode (only non-zero values)
+	// line 4: extra token details + mode
 	var extras []string
 	if mode := s.Settings.AutonomyMode; mode != "" {
 		extras = append(extras, previewLabelStyle.Render("Mode: ")+previewValueStyle.Render(mode))
@@ -55,28 +55,31 @@ func renderPreview(s *session.Session, sum *summary.Summary, width int) string {
 		extras = append(extras, previewLabelStyle.Render("Cache: ")+previewValueStyle.Render(
 			fmt.Sprintf("%s read / %s created", formatTokens(u.CacheReadTokens), formatTokens(u.CacheCreationTokens))))
 	}
+	metaLines := 3
 	if len(extras) > 0 {
 		b.WriteString(strings.Join(extras, "  |  "))
 		b.WriteString("\n")
+		metaLines++
 	}
 
-	// show AI summary topics if available
-	if sum != nil && len(sum.Topics) > 0 {
-		for _, t := range sum.Topics {
-			b.WriteString(previewLabelStyle.Render("● ") + previewValueStyle.Render(t.Summary))
-			if len(t.Keywords) > 0 {
-				b.WriteString("  " + dimStyle.Render(strings.Join(t.Keywords, ", ")))
-			}
-			b.WriteString("\n")
-		}
-	}
-
-	sep := dimStyle.Render(strings.Repeat("─", min(width-2, 60)))
-	b.WriteString(sep)
+	// separator
+	b.WriteString(dimStyle.Render(strings.Repeat("─", min(width-2, 60))))
 	b.WriteString("\n")
+	metaLines++ // separator
 
-	// show first few conversation turns
-	count := 0
+	// remaining lines for conversation
+	msgLines := height - metaLines
+	if msgLines < 2 {
+		msgLines = 2
+	}
+	maxLen := width - 8 // leave room for "User: " prefix
+
+	// collect meaningful messages
+	type turnMsg struct {
+		role string
+		text string
+	}
+	var turns []turnMsg
 	for _, msg := range s.Messages {
 		if msg.Role != "user" && msg.Role != "assistant" {
 			continue
@@ -85,38 +88,52 @@ func renderPreview(s *session.Session, sum *summary.Summary, width int) string {
 		if text == "" {
 			continue
 		}
-		if len(text) > 120 {
-			text = text[:117] + "..."
+		if len(text) > maxLen {
+			text = text[:maxLen-3] + "..."
 		}
-
-		if msg.Role == "user" {
-			b.WriteString(userMsgStyle.Render("User: ") + previewValueStyle.Render(text))
-		} else {
-			b.WriteString(assistantMsgStyle.Render("Asst: ") + dimStyle.Render(text))
-		}
-		b.WriteString("\n")
-		count++
-		if count >= 3 {
-			break
-		}
+		turns = append(turns, turnMsg{msg.Role, text})
 	}
 
-	// show last meaningful assistant reply
-	lastReply := lastAssistantReply(s)
-	if lastReply != "" {
-		if count > 0 {
-			b.WriteString(dimStyle.Render("  ..."))
+	if len(turns) == 0 {
+		b.WriteString(dimStyle.Render("(no messages)"))
+		return b.String()
+	}
+
+	// decide how many from head/tail to show
+	showHead := msgLines / 2
+	showTail := msgLines - showHead - 1 // -1 for "..."
+	if showTail < 1 {
+		showTail = 1
+		showHead = msgLines - showTail - 1
+	}
+
+	if len(turns) <= msgLines {
+		// all fit, show everything
+		for _, t := range turns {
+			b.WriteString(formatTurn(t.role, t.text))
 			b.WriteString("\n")
 		}
-		b.WriteString(assistantMsgStyle.Render("Last: ") + dimStyle.Render(lastReply))
+	} else {
+		for _, t := range turns[:showHead] {
+			b.WriteString(formatTurn(t.role, t.text))
+			b.WriteString("\n")
+		}
+		b.WriteString(dimStyle.Render(fmt.Sprintf("  ... (%d more turns) ...", len(turns)-showHead-showTail)))
 		b.WriteString("\n")
-	}
-
-	if count == 0 && lastReply == "" {
-		b.WriteString(dimStyle.Render("(no messages)"))
+		for _, t := range turns[len(turns)-showTail:] {
+			b.WriteString(formatTurn(t.role, t.text))
+			b.WriteString("\n")
+		}
 	}
 
 	return b.String()
+}
+
+func formatTurn(role, text string) string {
+	if role == "user" {
+		return userMsgStyle.Render("User: ") + previewValueStyle.Render(text)
+	}
+	return assistantMsgStyle.Render("Asst: ") + dimStyle.Render(text)
 }
 
 func lastAssistantReply(s *session.Session) string {
