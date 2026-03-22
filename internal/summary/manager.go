@@ -55,7 +55,6 @@ func GenerateMissing(ctx context.Context, cfg config.LLMConfig, sessions []sessi
 						return
 					}
 					s := &sessions[idx]
-					msgs := extractUserMessages(s)
 					d := int(done.Add(1))
 
 					p := Progress{
@@ -65,9 +64,24 @@ func GenerateMissing(ctx context.Context, cfg config.LLMConfig, sessions []sessi
 						Index:   idx,
 					}
 
+					// skip if another process is already handling this session
+					if !TryLock(s.FilePath) {
+						ch <- p
+						continue
+					}
+
+					// double-check after acquiring lock (another process may have finished)
+					if HasSummary(s.FilePath) {
+						Unlock(s.FilePath)
+						ch <- p
+						continue
+					}
+
+					msgs := extractUserMessages(s)
 					if len(msgs) == 0 {
 						empty := &Summary{GeneratedAt: time.Now(), Model: cfg.Model}
 						SaveSummary(s.FilePath, empty)
+						Unlock(s.FilePath)
 						p.Summary = empty
 						ch <- p
 						continue
@@ -75,12 +89,14 @@ func GenerateMissing(ctx context.Context, cfg config.LLMConfig, sessions []sessi
 
 					sum, err := Generate(ctx, cfg, msgs)
 					if err != nil {
+						Unlock(s.FilePath)
 						p.Err = err
 						ch <- p
 						continue
 					}
 
 					SaveSummary(s.FilePath, sum)
+					Unlock(s.FilePath)
 					p.Summary = sum
 					ch <- p
 				}

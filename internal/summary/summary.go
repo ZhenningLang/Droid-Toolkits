@@ -66,6 +66,23 @@ func HasSummary(sessionFilePath string) bool {
 	return err == nil
 }
 
+// TryLock attempts to create a lock file for a session. Returns true if lock acquired.
+func TryLock(sessionFilePath string) bool {
+	lockPath := SummaryPath(sessionFilePath) + ".lock"
+	os.MkdirAll(filepath.Dir(lockPath), 0755)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		return false
+	}
+	f.Close()
+	return true
+}
+
+// Unlock removes the lock file for a session.
+func Unlock(sessionFilePath string) {
+	os.Remove(SummaryPath(sessionFilePath) + ".lock")
+}
+
 // RemoveEmpty deletes summary files that have an empty title, so they can be re-indexed.
 func RemoveEmpty(sessions []session.Session) int {
 	removed := 0
