@@ -98,6 +98,14 @@ func renderListItem(s *session.Session, sum *summary.Summary, width int, selecte
 	model := modelShort(s.Settings.Model)
 	ago := timeAgo(s.ModTime)
 
+	// count conversation turns (user messages)
+	turns := 0
+	for _, msg := range s.Messages {
+		if msg.Role == "user" {
+			turns++
+		}
+	}
+
 	// short session id (first 8 chars)
 	sid := s.Meta.ID
 	if len(sid) > 8 {
@@ -107,7 +115,7 @@ func renderListItem(s *session.Session, sum *summary.Summary, width int, selecte
 
 	// build the line
 	left := fmt.Sprintf("  %s %s %s", proj, sid, title)
-	right := fmt.Sprintf("%s  %s", ago, model)
+	right := fmt.Sprintf("%dt  %s  %s", turns, ago, model)
 
 	// pad between left and right
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right) - 2

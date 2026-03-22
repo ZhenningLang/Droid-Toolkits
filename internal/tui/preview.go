@@ -85,9 +85,6 @@ func renderPreview(s *session.Session, sum *summary.Summary, width int) string {
 		if text == "" {
 			continue
 		}
-		if strings.HasPrefix(text, "<system-reminder>") || strings.HasPrefix(text, "<EXTREMELY") {
-			continue
-		}
 		if len(text) > 120 {
 			text = text[:117] + "..."
 		}
@@ -129,7 +126,7 @@ func lastAssistantReply(s *session.Session) string {
 			continue
 		}
 		text := extractText(msg.Content)
-		if text == "" || strings.HasPrefix(text, "<") {
+		if text == "" {
 			continue
 		}
 		if len(text) > 150 {

@@ -17,7 +17,11 @@ func extractText(content any) string {
 			if m, ok := item.(map[string]any); ok {
 				if m["type"] == "text" {
 					if t, ok := m["text"].(string); ok {
-						return singleLine(t)
+						t = singleLine(t)
+						if strings.HasPrefix(t, "<") {
+							continue
+						}
+						return t
 					}
 				}
 			}
