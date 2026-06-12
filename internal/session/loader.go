@@ -16,6 +16,10 @@ func sessionsDir() string {
 }
 
 func LoadAll() ([]Session, error) {
+	return LoadDroid()
+}
+
+func LoadDroid() ([]Session, error) {
 	root := sessionsDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {

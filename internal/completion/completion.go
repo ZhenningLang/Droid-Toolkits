@@ -6,8 +6,12 @@ import (
 )
 
 var commandNames = []string{
+	"droid",
+	"claude",
+	"opencode",
+	"kilo",
+	"all",
 	"inspect",
-	"compress",
 	"fork",
 	"config",
 	"index",

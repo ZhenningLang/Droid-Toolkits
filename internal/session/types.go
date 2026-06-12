@@ -34,14 +34,18 @@ type Message struct {
 }
 
 type Session struct {
-	Meta        SessionMeta
-	Settings    Settings
-	Project     string // short name (last segment)
-	ProjectFull string // full directory path
-	ModTime     time.Time
-	FilePath    string
-	Messages    []Message
-	Selected    bool
+	Provider     string
+	ProviderName string
+	ResumeRef    string
+	ForkRef      string
+	Meta         SessionMeta
+	Settings     Settings
+	Project      string // short name (last segment)
+	ProjectFull  string // full directory path
+	ModTime      time.Time
+	FilePath     string
+	Messages     []Message
+	Selected     bool
 }
 
 func (s *Session) ProjectShort() string {

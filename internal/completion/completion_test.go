@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestGenerateIncludesInspectAndCompressForAllShells(t *testing.T) {
+func TestGenerateIncludesSupportedCommandsForAllShells(t *testing.T) {
 	shells := []string{"bash", "zsh", "fish"}
 
 	for _, shell := range shells {
@@ -14,10 +14,13 @@ func TestGenerateIncludesInspectAndCompressForAllShells(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Generate(%q) error = %v", shell, err)
 			}
-			for _, command := range []string{"inspect", "compress", "fork"} {
+			for _, command := range []string{"inspect", "fork", "droid", "claude", "opencode", "kilo", "all"} {
 				if !strings.Contains(script, command) {
 					t.Fatalf("Generate(%q) missing command %q in script: %s", shell, command, script)
 				}
+			}
+			if strings.Contains(script, "compress") {
+				t.Fatalf("Generate(%q) should not include removed command compress: %s", shell, script)
 			}
 		})
 	}

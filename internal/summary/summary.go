@@ -28,6 +28,12 @@ func Dir() string {
 }
 
 func SummaryPath(sessionFilePath string) string {
+	if strings.Contains(sessionFilePath, "#") {
+		parts := strings.SplitN(sessionFilePath, "#", 2)
+		providerDir := filepath.Base(filepath.Dir(parts[0]))
+		id := strings.NewReplacer("/", "_", string(filepath.Separator), "_").Replace(parts[1])
+		return filepath.Join(Dir(), providerDir, id+".summary.json")
+	}
 	// sessionFilePath: ~/.factory/sessions/{project_dir}/{id}.jsonl
 	// summaryPath:     ~/.mantis/summaries/{project_dir}/{id}.summary.json
 	dir := filepath.Dir(sessionFilePath)

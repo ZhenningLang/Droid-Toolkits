@@ -41,6 +41,14 @@
 - 样式统一定义在 `styles.go`，不在渲染函数中内联
 - 视图模式用枚举管理，按模式分发输入和渲染
 
+## Provider adapter 惯例
+
+- provider 负责 agent-specific 路径、schema、resume/fork 命令；`main.go` 和 TUI 不拼接具体 agent CLI 参数
+- loader 默认只读 metadata；读取正文、工具输出、auth/settings 等敏感内容前必须有明确需求和边界
+- 写回型能力（rename/delete/fork）必须由 provider capability 显式声明，不支持时显式失败
+- OpenCode/Kilo SQLite 读取使用只读连接，不读取 `auth.json`、tool-output、snapshot 等敏感文件
+- `compress` 已从用户可见能力剔除，不应为新 provider 继续扩展
+
 ## 其他参考
 
 ### Zen of Go

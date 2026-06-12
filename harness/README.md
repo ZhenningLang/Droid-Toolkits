@@ -1,6 +1,6 @@
 # Development Harness (For AI Coding Agent)
 
-mantis 是一个终端 TUI + CLI 工具，用于浏览、搜索、管理和分析 [Droid](https://docs.factory.ai) 的聊天 session。
+mantis 是一个终端 TUI + CLI 工具，用于浏览、搜索、管理和分析多种 coding agent 的聊天 session。
 
 用户可以在终端中快速查找历史 session、预览对话内容、恢复 / 删除 / 重命名 session，也可以对代表性 session 做上下文健康度分析。
 
@@ -14,7 +14,10 @@ mantis 是一个终端 TUI + CLI 工具，用于浏览、搜索、管理和分�
 
 ## 数据来源
 
-- Sessions: `~/.factory/sessions/` — `.jsonl` + `.settings.json`
+- Droid sessions: `~/.factory/sessions/` — `.jsonl` + `.settings.json`
+- Claude Code sessions: `~/.claude/projects/` — project-encoded JSONL tree
+- OpenCode sessions: `~/.local/share/opencode/opencode.db` — SQLite metadata
+- Kilo sessions: `~/.local/share/kilo/kilo.db` — SQLite metadata
 - 配置: `~/.mantis/config.yaml` — LLM 配置（可选）
 - 摘要缓存: `~/.mantis/summaries/` — LLM 生成的 session 摘要
 - 分析报告: `~/.mantis/reports/` — `mantis inspect` 输出的报告
@@ -25,9 +28,9 @@ mantis 是一个终端 TUI + CLI 工具，用于浏览、搜索、管理和分�
 |------|--------|------|
 | 模糊搜索 | 直接输入 | 搜索 title + project + 用户消息（有摘要时搜索摘要+关键词） |
 | 项目筛选 | Ctrl+P | 按项目过滤 session 列表（支持搜索） |
-| 恢复 session | Enter | 退出后 exec `droid -r <id>` |
-| 压缩并恢复 | `mantis compress <prefix>` | 打印阶段日志；LLM 生成 handoff 时每 5 秒输出一次心跳进度；输出含 compacted history + deterministic recent transcript；新建 session 后立即恢复 |
-| 分叉恢复 | `mantis fork <prefix>` | 解析 session 前缀后直接执行 `droid --fork <full-id>` |
+| 平台选择 | 启动时选择 | 无平台参数时先选择 Droid / Claude Code / OpenCode / Kilo / All |
+| 恢复 session | Enter | 退出后按 provider 执行对应 resume 命令 |
+| 分叉恢复 | `mantis fork <prefix>` | 解析 session 前缀后按 provider 执行 fork 命令 |
 | 删除 | Ctrl+D | 单条删除（需确认） |
 | 批量删除 | Ctrl+X | 进入选择模式，Tab 标记，d 确认 |
 | 重命名 | Ctrl+R | 修改 session title |
@@ -55,9 +58,13 @@ mantis 是一个终端 TUI + CLI 工具，用于浏览、搜索、管理和分�
 ## CLI 子命令
 
 ```bash
-mantis              # 启动 TUI
+mantis              # 选择平台后启动 TUI
+mantis droid        # 启动 Droid session TUI
+mantis claude       # 启动 Claude Code session TUI
+mantis opencode     # 启动 OpenCode session TUI
+mantis kilo         # 启动 Kilo session TUI
+mantis all          # 启动多平台 session TUI
 mantis inspect      # 分析 session 的上下文开销与优化点
-mantis compress     # 压缩指定 session 并跳转到新的 handoff session
 mantis fork         # 按 session 前缀分叉并跳转
 mantis completion   # 输出 bash/zsh/fish 补全脚本
 mantis config       # 配置 LLM（交互式，供 smart search / inspect 复用）

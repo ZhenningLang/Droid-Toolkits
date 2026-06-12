@@ -36,9 +36,9 @@ func filterSessions(sessions []session.Session, query, projectFilter string, sum
 	for i, idx := range candidates {
 		s := sessions[idx]
 		if sum, ok := summaries[idx]; ok && sum != nil {
-			source[i] = fmt.Sprintf("%s %s %s", sum.SearchText(), s.ProjectShort(), s.Meta.Title)
+			source[i] = fmt.Sprintf("%s %s %s %s", sum.SearchText(), s.ProviderName, s.ProjectShort(), s.Meta.Title)
 		} else {
-			source[i] = fmt.Sprintf("%s %s %s", s.Meta.Title, s.ProjectShort(), extractUserMsgSample(s))
+			source[i] = fmt.Sprintf("%s %s %s %s", s.ProviderName, s.Meta.Title, s.ProjectShort(), extractUserMsgSample(s))
 		}
 	}
 
@@ -86,7 +86,11 @@ func extractUserMsgSample(s session.Session) string {
 }
 
 func renderListItem(s *session.Session, sum *summary.Summary, width int, selected, marked, fullPath bool) string {
-	proj := projectStyle.Render(fmt.Sprintf("[%s]", s.ProjectDisplay(fullPath)))
+	agent := s.Provider
+	if agent == "" {
+		agent = "droid"
+	}
+	proj := projectStyle.Render(fmt.Sprintf("[%s:%s]", agent, s.ProjectDisplay(fullPath)))
 	title := s.Meta.Title
 	if sum != nil && sum.Title != "" {
 		title = "[AI] " + sum.Title
@@ -140,9 +144,9 @@ func modelShort(model string) string {
 	m = strings.TrimPrefix(m, "anthropic/")
 	// shorten common patterns
 	replacements := map[string]string{
-		"Claude-Opus-4.6-0":   "Opus 4.6",
-		"Claude-Opus-4-0":     "Opus 4",
-		"Claude-Sonnet-4-0":   "Sonnet 4",
+		"Claude-Opus-4.6-0":        "Opus 4.6",
+		"Claude-Opus-4-0":          "Opus 4",
+		"Claude-Sonnet-4-0":        "Sonnet 4",
 		"claude-sonnet-4-20250514": "Sonnet 4",
 		"claude-opus-4-20250514":   "Opus 4",
 	}

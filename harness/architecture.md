@@ -3,16 +3,15 @@
 ## 项目结构
 
 ```
- main.go                       — 入口：CLI 分发（TUI / inspect / compress / fork / completion / config / index / status / clean）
+  main.go                       — 入口：CLI 分发（平台选择 / TUI / inspect / fork / completion / config / index / status / clean）
 internal/
   completion/
     completion.go            — 生成 bash / zsh / fish 子命令补全脚本
-  compress/
-    types.go                  — 压缩输入、handoff、Droid settings 类型
-    resolve.go                — session 前缀解析、Droid settings 解析、compress 主流程
-    extract.go                — 从 raw events 提取 anchors / task state / artifact trail
-    llm.go                    — 调用 source model 生成结构化 handoff JSON
-    session.go                — 渲染 handoff、新建 session 文件
+  provider/
+    provider.go               — provider registry、平台 ID、capabilities、resume/fork 分发
+    droid.go                  — Droid session adapter
+    claude.go                 — Claude Code JSONL metadata adapter
+    sqlite_agent.go           — OpenCode / Kilo SQLite metadata adapter
   config/
     config.go                 — 配置加载/保存/交互式引导（~/.mantis/config.yaml）
   llmstream/
@@ -97,9 +96,11 @@ viewBatchSelect   // 批量选择删除
 ```
 main.go
   → session.LoadAll()
-    → 遍历 ~/.factory/sessions/ 子目录
-    → 每个 .jsonl 解析首行 meta + 前 20 条消息
-    → 每个 .settings.json 解析 settings
+    → 选择 provider（无参数启动时先选择平台）
+    → provider.Discover(agent)
+    → Droid: 遍历 ~/.factory/sessions/ 子目录，解析 .jsonl + .settings.json
+    → Claude Code: 遍历 ~/.claude/projects/ project-encoded JSONL metadata
+    → OpenCode/Kilo: 只读 SQLite session metadata
     → 按 ModTime 倒序排列
   → tui.New(sessions)
     → 初始化 filtered = [0, 1, 2, ..., n-1]
@@ -123,35 +124,20 @@ main.go
 
 ### compress 压缩
 
-```
-main.go
-  → compress.Run(args)
-    → session.LoadAll()
-    → ResolveSourceByPrefix()
-    → session.ParseAllEvents(path)
-    → BuildCompressionInput()
-      → 找到最近一次 compressed handoff 作为 anchor
-      → 按 token budget 切分 summarized turns / preserved turns
-      → 提取 active skills / artifacts / todo / errors
-      → 把较老消息按 user-turn 聚合成 compacted history phases
-    → 读取 ~/.factory/settings.json 解析压缩 auth + model
-    → GenerateHandoff()
-      → 统一走默认流式 Chat Completions
-      → compress 每 5 秒打印一次 handoff 生成心跳，避免长时间静默
-      → 空输出/非法 JSON 直接失败
-    → CreateCompressedSession()
-      → 在最终 handoff 文本里追加 deterministic recent transcript（从 preserved turns 截取最近 visible turns，并过滤 Droid 内部 BYOK 错误提示）
-  → exec droid -r <new-id>
-```
+`compress` CLI 能力已剔除，不再作为用户可见能力维护。旧 `internal/compress` 包若存在，仅视为待删除遗留代码，不应接入多 provider 抽象。
 
 ### fork 分叉
 
 ```
 main.go
   → runFork(args)
-    → session.LoadAll()
-    → compress.ResolveSourceByPrefix()
-    → exec droid --fork <full-id>
+    → provider.Discover(currentProvider)
+    → provider.ResolveByPrefix()
+  → provider.Fork(session)
+    → Droid: droid --fork <full-id>
+    → Claude Code: claude --resume <id> --fork-session
+    → OpenCode: opencode --session <id> --fork
+    → Kilo: kilo --session <id> --fork
 ```
 
 ### LLM 流式调用
@@ -177,7 +163,7 @@ main.go
 ### 操作
 
 ```
-Enter   → 设置 resumeID → tea.Quit → main.go exec droid -r <id>
+Enter   → 设置 resumeID → tea.Quit → main.go provider.Resume(session)
 Ctrl+D  → 切换到 viewConfirmDelete → y: action.Delete() 删除文件
 Ctrl+R  → 切换到 viewRename → enter: action.Rename() 修改 .jsonl 首行
 Ctrl+X  → 切换到 viewBatchSelect → Tab 标记 → d: 批量 action.Delete()

@@ -28,7 +28,12 @@ func renderPreview(s *session.Session, sum *summary.Summary, width, height int) 
 	}
 
 	// line 2-3: metadata
-	info := fmt.Sprintf("%s  |  %s  |  %s",
+	agent := s.ProviderName
+	if agent == "" {
+		agent = "Droid"
+	}
+	info := fmt.Sprintf("%s  |  %s  |  %s  |  %s",
+		previewLabelStyle.Render("Agent: ")+previewValueStyle.Render(agent),
 		previewLabelStyle.Render("Project: ")+previewValueStyle.Render(s.ProjectShort()),
 		previewLabelStyle.Render("Model: ")+previewValueStyle.Render(modelShort(s.Settings.Model)),
 		previewLabelStyle.Render("Updated: ")+previewValueStyle.Render(timeAgo(s.ModTime)),
@@ -156,4 +161,3 @@ func formatTurn(role, text string) string {
 	}
 	return assistantMsgStyle.Render("Asst: ") + dimStyle.Render(text)
 }
-

@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/zhenninglang/mantis/internal/action"
 	"github.com/zhenninglang/mantis/internal/completion"
-	"github.com/zhenninglang/mantis/internal/compress"
 	"github.com/zhenninglang/mantis/internal/config"
 	"github.com/zhenninglang/mantis/internal/inspect"
+	"github.com/zhenninglang/mantis/internal/provider"
 	"github.com/zhenninglang/mantis/internal/session"
 	"github.com/zhenninglang/mantis/internal/status"
 	"github.com/zhenninglang/mantis/internal/summary"
@@ -20,33 +20,43 @@ import (
 
 var version = "dev"
 
-var resolveForkSessionID = func(prefix string) (string, error) {
-	sessions, err := session.LoadAll()
+var currentProvider = provider.Droid
+
+var resolveForkSession = func(agent provider.ID, prefix string) (session.Session, error) {
+	sessions, _, err := provider.Discover(agent)
 	if err != nil {
-		return "", fmt.Errorf("load sessions: %w", err)
+		return session.Session{}, fmt.Errorf("load sessions: %w", err)
 	}
-	source, err := compress.ResolveSourceByPrefix(sessions, prefix)
-	if err != nil {
-		return "", err
-	}
-	return source.Meta.ID, nil
+	return provider.ResolveByPrefix(sessions, prefix)
 }
 
-var forkSession = func(id string) error {
-	droid, err := exec.LookPath("droid")
-	if err != nil {
-		return fmt.Errorf("droid not found: %w", err)
-	}
-	cmd := exec.Command(droid, "--fork", id)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
+var forkResolvedSession = provider.Fork
 
 func main() {
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "--agent" {
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Error: usage: mantis --agent <droid|claude|opencode|kilo|all>")
+			os.Exit(1)
+		}
+		agent, ok := provider.ParseID(args[1])
+		if !ok {
+			fmt.Fprintf(os.Stderr, "Error: unknown agent %q\n", args[1])
+			os.Exit(1)
+		}
+		currentProvider = agent
+		runTUI(agent)
+		return
+	}
+
+	if len(args) > 0 {
+		if agent, ok := provider.ParseID(args[0]); ok {
+			currentProvider = agent
+			runTUI(agent)
+			return
+		}
+
+		switch args[0] {
 		case "config":
 			if err := config.RunSetup(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -88,40 +98,48 @@ func main() {
 				os.Exit(1)
 			}
 			return
-		case "compress":
-			if err := runCompress(os.Args[2:]); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-			return
 		case "fork":
-			if err := runFork(os.Args[2:]); err != nil {
+			if err := runFork(args[1:]); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
 			return
 		case "completion":
-			if err := runCompletion(os.Args[2:]); err != nil {
+			if err := runCompletion(args[1:]); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "Unknown command: %s\nRun `mantis help` for usage.\n", os.Args[1])
+			if strings.Contains(args[0], "compress") {
+				fmt.Fprintln(os.Stderr, "compress has been removed")
+			} else {
+				fmt.Fprintf(os.Stderr, "Unknown command: %s\nRun `mantis help` for usage.\n", args[0])
+			}
 			os.Exit(1)
 		}
 	}
 
-	cfg := config.Load()
+	agent, err := chooseProvider()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	runTUI(agent)
+}
 
-	sessions, err := session.LoadAll()
+func runTUI(agent provider.ID) {
+	cfg := config.Load()
+	sessions, diagnostics, err := provider.Discover(agent)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading sessions: %v\n", err)
 		os.Exit(1)
 	}
-
 	if len(sessions) == 0 {
-		fmt.Println("No sessions found in ~/.factory/sessions/")
+		for _, diagnostic := range diagnostics {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", diagnostic.Provider, diagnostic.Message)
+		}
+		fmt.Println("No sessions found.")
 		os.Exit(0)
 	}
 
@@ -137,21 +155,31 @@ func main() {
 
 	model := result.(*tui.Model)
 	if id := model.ResumeID(); id != "" {
-		if err := resumeSession(id); err != nil {
+		selected, err := provider.ResolveByPrefix(sessions, id)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := provider.Resume(selected); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	}
 }
 
 func printHelp() {
-	fmt.Printf(`mantis %s — Browse and search Droid chat sessions
+	fmt.Printf(`mantis %s — Browse and search agent chat sessions
 
-Usage: mantis [command]
+Usage: mantis [agent|command]
 
 Commands:
-  (none)     Launch interactive TUI (session viewer)
+  (none)     Choose an agent, then launch interactive TUI
+  droid      Browse Droid sessions
+  claude     Browse Claude Code sessions
+  opencode   Browse OpenCode sessions
+  kilo       Browse Kilo sessions
+  all        Browse all supported sessions
   inspect    Context Health Inspector — analyze sessions for optimization
-  compress   Compress a session into a fresh handoff session and resume it
   fork       Fork a session by ID prefix and resume the fork
   completion Print shell completion script for bash/zsh/fish
   config     Configure LLM for smart search and inspect
@@ -272,28 +300,16 @@ func runClean() error {
 	return nil
 }
 
-func runCompress(args []string) error {
-	id, err := compress.Run(args)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("[compress] Resuming new session %s...\n", id)
-	if err := resumeSession(id); err != nil {
-		return fmt.Errorf("compressed session %s created, but resume failed: %w", id, err)
-	}
-	return nil
-}
-
 func runFork(args []string) error {
 	if len(args) != 1 || args[0] == "" {
 		return fmt.Errorf("usage: mantis fork <session-id-prefix>")
 	}
-	id, err := resolveForkSessionID(args[0])
+	s, err := resolveForkSession(currentProvider, args[0])
 	if err != nil {
 		return err
 	}
-	fmt.Printf("[fork] Forking session %s...\n", id)
-	return forkSession(id)
+	fmt.Printf("[fork] Forking %s session %s...\n", s.ProviderName, s.Meta.ID)
+	return forkResolvedSession(s)
 }
 
 func runCompletion(args []string) error {
@@ -308,14 +324,25 @@ func runCompletion(args []string) error {
 	return nil
 }
 
-func resumeSession(id string) error {
-	droid, err := exec.LookPath("droid")
-	if err != nil {
-		return fmt.Errorf("droid not found: %w", err)
+func chooseProvider() (provider.ID, error) {
+	options := []provider.ID{provider.Droid, provider.ClaudeCode, provider.OpenCode, provider.Kilo, provider.All}
+	fmt.Println("Choose agent platform:")
+	for i, id := range options {
+		name := string(id)
+		if adapter, ok := provider.AdapterFor(id); ok {
+			name = adapter.DisplayName()
+		} else if id == provider.All {
+			name = "All"
+		}
+		fmt.Printf("  %d. %s\n", i+1, name)
 	}
-	cmd := exec.Command(droid, "-r", id)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	fmt.Print("Select [1-5]: ")
+	var choice int
+	if _, err := fmt.Scanln(&choice); err != nil {
+		return "", err
+	}
+	if choice < 1 || choice > len(options) {
+		return "", fmt.Errorf("invalid platform selection %d", choice)
+	}
+	return options[choice-1], nil
 }
